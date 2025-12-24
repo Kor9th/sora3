@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 #ignore python virtual environment
 venv/
+
+*.db
+*.sqlite
+*.sqlite3

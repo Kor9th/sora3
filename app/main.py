@@ -16,7 +16,7 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",  # Common for React
-    "http://localhost:5174",  # Common for Vite/Vue
+    "http://localhost:5173",  # Common for Vite/Vue
     "http://127.0.0.1:5500",  # Common for Live Server (VS Code)
 ]
 
@@ -63,3 +63,5 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
 @app.get("/verify")
 def verify_user(token: str, db: Session = Depends(get_database)):
                 return {"message": "Email verified succesfully"}
+
+
