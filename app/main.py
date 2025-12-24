@@ -12,7 +12,7 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",  # Common for React
-    "http://localhost:5174",  # Common for Vite/Vue
+    "http://localhost:5173",  # Common for Vite/Vue
     "http://127.0.0.1:5500",  # Common for Live Server (VS Code)
 ]
 
