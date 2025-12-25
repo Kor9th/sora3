@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-
 from . import models, crud, schemas, auth
 from .database import engine, get_database
 
@@ -12,8 +11,9 @@ app = FastAPI()
 
 
 origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    "http://localhost:3000",  # Common for React
+    "http://localhost:5173",  # Common for Vite/Vue
+    "http://127.0.0.1:5500",  # Common for Live Server (VS Code)
 ]
 
 app.add_middleware(
@@ -71,4 +71,4 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
 
 @app.get("/verify")
 def verify_user(token: str, db: Session = Depends(get_database)):
-    return {"message": "Email verified successfully"}
+                return {"message": "Email verified succesfully"}
