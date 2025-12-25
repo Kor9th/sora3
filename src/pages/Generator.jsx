@@ -10,7 +10,7 @@ function nowLabel() {
   });
 }
 
-export default function Generator() {
+export default function Generator({ onLogout }) {
   const MAX_CHARS = 1000;
 
   const [prompt, setPrompt] = useState("");
@@ -42,7 +42,7 @@ export default function Generator() {
     setVideoUrl(null);
 
     setTimeout(() => {
-      const url = "https://www.w3schools.com/html/mov_bbb.mp4"; // placeholder, replace this later
+      const url = "https://www.w3schools.com/html/mov_bbb.mp4";
       setVideoUrl(url);
       setLoading(false);
 
@@ -51,6 +51,12 @@ export default function Generator() {
         ...prev,
       ]);
     }, 1800);
+  }
+
+  function logout() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("token_type");
+    onLogout?.();
   }
 
   return (
@@ -64,9 +70,11 @@ export default function Generator() {
           </div>
         </div>
 
-        <a className="smallLink" href="#" onClick={(e) => e.preventDefault()}>
-          Settings
-        </a>
+        <div className="topActions">
+          <button className="btn btnSecondary" type="button" onClick={logout}>
+            Log out
+          </button>
+        </div>
       </div>
 
       <div className="shell">
@@ -94,7 +102,7 @@ export default function Generator() {
                 className="textarea"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value.slice(0, MAX_CHARS))}
-                placeholder="Ex: A bright, modern skincare ad with soft studio lighting, clean white background, close-up product shots, and an upbeat tone."
+                placeholder="Example: A bright, modern skincare ad with soft studio lighting, clean white background, close-up product shots, and an upbeat tone."
               />
 
               <div className="promptMeta">
