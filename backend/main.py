@@ -100,7 +100,7 @@ def run_azure(video_id:int , prompt:str):
                     if generations:
                         generation_id = generations[0].get("id")
                         video_url = get_generation_video_url(generation_id)
-                        clean_url = video_url.split('api-key=')[0].rstrip('&?')
+                        clean_url = video_url.split('?')[0]
                         video_record.video_url = clean_url
                         video_record.status = "Completed"
                         db.commit()
@@ -167,7 +167,7 @@ def get_video_status(
         
     return video
 
-@app.get("videos/{video_id}/stream")
+@app.get("/videos/{video_id}/stream")
 async def secure_vidstream(video_id: int, db:Session = Depends(get_database),
                            current_user: models.User = Depends(auth.get_current_user)
                            ):
@@ -176,6 +176,7 @@ async def secure_vidstream(video_id: int, db:Session = Depends(get_database),
      
     if not video or not video.video_url:
         raise HTTPException(status_code=404, detail="Video not found or not ready")
+    print(f"DEBUG: Found video! URL is {video.video_url}")
     
     secure_url = f"{video.video_url}?api-version=preview&api-key={videogen.SORA_KEY}"
 
