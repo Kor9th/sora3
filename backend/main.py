@@ -187,3 +187,16 @@ async def secure_vidstream(video_id: int, db:Session = Depends(get_database),
                 yield chunk
 
     return StreamingResponse(generate_stream(), media_type="video/mp4")
+
+
+@app.get("/videos", response_model=list[schemas.VideoResponse])
+def get_user_videos(
+    db: Session = Depends(get_database),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    # Fetch all videos for the user, newest first
+    videos = db.query(models.VideoGeneration).filter(
+        models.VideoGeneration.user_id == current_user.id
+    ).order_by(models.VideoGeneration.created_at.desc()).all()
+    
+    return videos
