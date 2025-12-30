@@ -10,73 +10,73 @@ function nowLabel() {
   });
 }
 
-export default function Generator({ userEmail = "" }) {
-  const MAX_CHARS = 1000;
-
+export default function Generator({ onLogout, user }) {
   const [prompt, setPrompt] = useState("");
-  const [duration, setDuration] = useState(5);
-  const [aspectRatio, setAspectRatio] = useState("16:9");
+  const [resolution, setResolution] = useState("1920x1080");
+  const [duration, setDuration] = useState(6);
 
   const [loading, setLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [history, setHistory] = useState([]);
 
-  const charCount = prompt.length;
-  const warn = charCount > MAX_CHARS * 0.85;
+  const charLimit = 1000;
 
   const canGenerate = useMemo(
     () => prompt.trim().length >= 10 && !loading,
     [prompt, loading]
   );
 
-  const email =
-    userEmail || localStorage.getItem("user_email") || "";
-
-  function logout() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user_email");
-    window.location.reload();
-  }
-
   function reset() {
     setPrompt("");
-    setDuration(5);
-    setAspectRatio("16:9");
-    setVideoUrl(null);
+    setResolution("1920x1080");
+    setDuration(6);
     setLoading(false);
+    setVideoUrl(null);
   }
 
+  // TEMP: fake generator until backend is stable
   function generateFake() {
     setLoading(true);
+    setVideoUrl(null);
+
     setTimeout(() => {
       const url = "https://www.w3schools.com/html/mov_bbb.mp4";
       setVideoUrl(url);
       setLoading(false);
 
       setHistory((prev) => [
-        { id: crypto.randomUUID(), createdAt: nowLabel(), prompt, url },
+        {
+          id: crypto.randomUUID(),
+          createdAt: nowLabel(),
+          prompt: prompt.trim(),
+          resolution,
+          duration,
+          url,
+        },
         ...prev,
       ]);
-    }, 1800);
+    }, 1500);
+  }
+
+  function logout() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("token_type");
+    onLogout();
   }
 
   return (
     <div className="container">
+      {/* TOP BAR */}
       <div className="topbar">
-        <div className="brand">
-          <div>
-            <h1>Sora Marketing Studio</h1>
-            <p>Prompt → generate → preview → download</p>
-          </div>
+        <div>
+          <h1>Marketing Video Generator</h1>
+          <p className="muted">
+            Prompt → generate → preview → download
+          </p>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {email ? (
-            <span className="badge" title={email}>
-              {email}
-            </span>
-          ) : null}
-
+        <div className="userBar">
+          <span className="muted">{user?.email}</span>
           <button className="btn btnSecondary" onClick={logout}>
             Log out
           </button>
@@ -84,50 +84,59 @@ export default function Generator({ userEmail = "" }) {
       </div>
 
       <div className="shell">
+        {/* LEFT PANEL */}
         <div className="card">
           <div className="cardHeader">
             <div>
-              <h2>Generator</h2>
-              <div className="sub">Write a prompt and choose output settings.</div>
+              <h2>Create video</h2>
+              <div className="sub">
+                Describe the marketing video you want to generate.
+              </div>
             </div>
 
             {loading && (
               <span className="badge">
-                <span className="spinner" />
-                Generating…
+                <span className="spinner" /> Generating…
               </span>
             )}
           </div>
 
           <div className="cardBody">
-            <div className="label">Marketing prompt</div>
-            <textarea
-              className="textarea"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value.slice(0, MAX_CHARS))}
-              placeholder="Ex: A bright, modern skincare ad with soft studio lighting, clean white background, close-up product shots, and an upbeat tone."
-            />
+            {/* PROMPT */}
+            <div style={{ marginBottom: 14 }}>
+              <div className="label">Marketing prompt</div>
 
-            <div className="promptMeta">
-              <span className={warn ? "hint warn" : "hint"}>
-                Include product, audience, mood, and setting
-              </span>
-              <span className={warn ? "counter warn" : "counter"}>
-                {charCount}/{MAX_CHARS}
-              </span>
+              <textarea
+                className="textarea"
+                value={prompt}
+                maxLength={charLimit}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Example: A modern skincare ad, clean white background, soft studio lighting, close-up product shots, minimal motion graphics, calm luxury vibe."
+              />
+
+              <div className="promptMeta">
+                <span className="fieldHint">
+                  Tips: product, audience, setting, mood, camera style
+                </span>
+                <span className="charCount">
+                  {prompt.length}/{charLimit}
+                </span>
+              </div>
             </div>
 
+            {/* OPTIONS */}
             <div className="row">
               <div>
-                <div className="label">Aspect ratio</div>
+                <div className="label">Resolution</div>
                 <select
                   className="select"
-                  value={aspectRatio}
-                  onChange={(e) => setAspectRatio(e.target.value)}
+                  value={resolution}
+                  onChange={(e) => setResolution(e.target.value)}
                 >
-                  <option value="16:9">16:9 (landscape)</option>
-                  <option value="9:16">9:16 (vertical)</option>
-                  <option value="1:1">1:1 (square)</option>
+                  <option value="1920x1080">1920×1080 (Full HD)</option>
+                  <option value="1280x720">1280×720 (HD)</option>
+                  <option value="1080x1920">1080×1920 (Vertical / Shorts)</option>
+                  <option value="1024x1024">1024×1024 (Square)</option>
                 </select>
               </div>
 
@@ -145,62 +154,113 @@ export default function Generator({ userEmail = "" }) {
               </div>
             </div>
 
+            {/* ACTIONS */}
             <div className="actions">
-              <button className="btn btnPrimary" disabled={!canGenerate} onClick={generateFake}>
-                {loading ? "Generating..." : "Generate video"}
+              <button
+                className="btn btnPrimary"
+                disabled={!canGenerate}
+                onClick={generateFake}
+              >
+                {loading ? "Generating…" : "Generate video"}
               </button>
 
               <button className="btn btnSecondary" onClick={reset}>
                 Reset
               </button>
             </div>
-
-            {videoUrl && (
-              <div style={{ marginTop: 16 }}>
-                <video className="video" controls src={videoUrl} />
-              </div>
-            )}
           </div>
         </div>
 
-        <div className="card">
-          <div className="cardHeader">
-            <h2>History</h2>
-            <div className="sub">{history.length ? "Recent runs" : "No runs yet"}</div>
+        {/* RIGHT PANEL */}
+        <div style={{ display: "grid", gap: 16 }}>
+          {/* PREVIEW */}
+          <div className="card">
+            <div className="cardHeader">
+              <h2>Preview</h2>
+            </div>
+
+            <div className="cardBody">
+              {!videoUrl && !loading && (
+                <p className="muted">No video yet.</p>
+              )}
+
+              {loading && <p className="muted">Working on it…</p>}
+
+              {videoUrl && (
+                <>
+                  <video className="video" controls src={videoUrl} />
+                  <div className="actions" style={{ marginTop: 12 }}>
+                    <a className="btn btnPrimary" href={videoUrl} download>
+                      Download
+                    </a>
+                    <button
+                      className="btn btnSecondary"
+                      onClick={() =>
+                        navigator.clipboard.writeText(prompt.trim())
+                      }
+                    >
+                      Copy prompt
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="cardBody">
-            {!history.length ? (
-              <p className="muted">Your generated videos will appear here.</p>
-            ) : (
-              <div className="list">
-                {history.slice(0, 5).map((h) => (
-                  <div className="item" key={h.id}>
-                    <div className="itemTop">
-                      <p className="itemTitle">{h.createdAt}</p>
-                      <a className="smallLink" href={h.url} download>
-                        Download
+          {/* HISTORY */}
+          <div className="card">
+            <div className="cardHeader">
+              <h2>History</h2>
+              <div className="sub">
+                {history.length ? "Recent videos" : "No videos yet"}
+              </div>
+            </div>
+
+            <div className="cardBody">
+              {!history.length && (
+                <p className="muted">
+                  Generated videos will appear here.
+                </p>
+              )}
+
+              {!!history.length && (
+                <div className="list">
+                  {history.slice(0, 5).map((h) => (
+                    <div className="item" key={h.id}>
+                      <div className="itemTop">
+                        <p className="itemTitle">{h.createdAt}</p>
+                        <a className="smallLink" href={h.url} download>
+                          Download
+                        </a>
+                      </div>
+
+                      <p className="itemMeta">
+                        {h.prompt.length > 120
+                          ? h.prompt.slice(0, 120) + "…"
+                          : h.prompt}
+                      </p>
+
+                      <div className="itemMeta">
+                        {h.resolution} · {h.duration}s
+                      </div>
+
+                      <a
+                        className="smallLink"
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setPrompt(h.prompt);
+                          setResolution(h.resolution);
+                          setDuration(h.duration);
+                        }}
+                      >
+                        Reuse prompt
                       </a>
                     </div>
-
-                    <p className="itemMeta">
-                      {h.prompt.length > 120 ? h.prompt.slice(0, 120) + "…" : h.prompt}
-                    </p>
-
-                    <a
-                      className="smallLink"
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setPrompt(h.prompt.slice(0, MAX_CHARS));
-                      }}
-                    >
-                      Use this prompt
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
