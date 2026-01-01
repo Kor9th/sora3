@@ -34,26 +34,59 @@ export default function Generator({ onLogout, user }) {
     setVideoUrl(null);
   }
 
-  // TEMP: No placeholder video — just simulates a "run" entry
-  function generateFake() {
+  async function generateVideo() {
     setLoading(true);
     setVideoUrl(null);
 
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) throw new Error("No access token found. Please log in again.");
+
+      const formData = new FormData();
+      formData.append("prompt", prompt.trim());
+      formData.append("size_str", resolution);      // backend expects size_str
+      formData.append("sec", String(duration));     // backend expects sec
+
+      const res = await fetch("http://127.0.0.1:8000/generate", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // IMPORTANT: do not set Content-Type for FormData
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        throw new Error(msg || `Generation failed (${res.status})`);
+      }
+
+      const data = await res.json().catch(() => ({}));
+      const id = data.id ?? data.video_id ?? data.videoId;
+
+      if (!id) {
+        throw new Error("Generate succeeded but backend did not return a video id.");
+      }
+
+      const stream = `http://127.0.0.1:8000/videos/${id}/stream`;
+      setVideoUrl(stream);
 
       setHistory((prev) => [
         {
-          id: crypto.randomUUID(),
+          id,
           createdAt: nowLabel(),
           prompt: prompt.trim(),
           resolution,
           duration,
-          url: null, // <-- no placeholder URL
+          url: stream,
         },
         ...prev,
       ]);
-    }, 800);
+    } catch (err) {
+      alert(err?.message || "Something went wrong generating the video.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function logout() {
@@ -68,7 +101,7 @@ export default function Generator({ onLogout, user }) {
       <div className="topbar">
         <div>
           <h1>Marketing Video Generator</h1>
-          <p className="muted">Prompt → generate → preview → download</p>
+          <p className="muted">Prompt → generate → preview → stream</p>
         </div>
 
         <div className="userBar">
@@ -128,6 +161,7 @@ export default function Generator({ onLogout, user }) {
                   className="select"
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value)}
+                  disabled={loading}
                 >
                   <option value="1920x1080">1920×1080 (Full HD)</option>
                   <option value="1280x720">1280×720 (HD)</option>
@@ -142,6 +176,7 @@ export default function Generator({ onLogout, user }) {
                   className="select"
                   value={duration}
                   onChange={(e) => setDuration(Number(e.target.value))}
+                  disabled={loading}
                 >
                   <option value={5}>5</option>
                   <option value={10}>10</option>
@@ -155,12 +190,12 @@ export default function Generator({ onLogout, user }) {
               <button
                 className="btn btnPrimary"
                 disabled={!canGenerate}
-                onClick={generateFake}
+                onClick={generateVideo}
               >
                 {loading ? "Generating…" : "Generate video"}
               </button>
 
-              <button className="btn btnSecondary" onClick={reset}>
+              <button className="btn btnSecondary" onClick={reset} disabled={loading}>
                 Reset
               </button>
             </div>
@@ -183,14 +218,17 @@ export default function Generator({ onLogout, user }) {
                 <>
                   <video className="video" controls src={videoUrl} />
                   <div className="actions" style={{ marginTop: 12 }}>
-                    <a className="btn btnPrimary" href={videoUrl} download>
-                      Download
+                    <a
+                      className="btn btnPrimary"
+                      href={videoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open stream
                     </a>
                     <button
                       className="btn btnSecondary"
-                      onClick={() =>
-                        navigator.clipboard.writeText(prompt.trim())
-                      }
+                      onClick={() => navigator.clipboard.writeText(prompt.trim())}
                     >
                       Copy prompt
                     </button>
@@ -220,21 +258,18 @@ export default function Generator({ onLogout, user }) {
                     <div className="item" key={h.id}>
                       <div className="itemTop">
                         <p className="itemTitle">{h.createdAt}</p>
-
-                        {/* No download link if no URL */}
-                        {h.url ? (
-                          <a className="smallLink" href={h.url} download>
-                            Download
-                          </a>
-                        ) : (
-                          <span className="muted">Pending</span>
-                        )}
+                        <a
+                          className="smallLink"
+                          href={h.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Stream
+                        </a>
                       </div>
 
                       <p className="itemMeta">
-                        {h.prompt.length > 120
-                          ? h.prompt.slice(0, 120) + "…"
-                          : h.prompt}
+                        {h.prompt.length > 120 ? h.prompt.slice(0, 120) + "…" : h.prompt}
                       </p>
 
                       <div className="itemMeta">
@@ -249,9 +284,10 @@ export default function Generator({ onLogout, user }) {
                           setPrompt(h.prompt);
                           setResolution(h.resolution);
                           setDuration(h.duration);
+                          setVideoUrl(h.url);
                         }}
                       >
-                        Reuse prompt
+                        Preview this
                       </a>
                     </div>
                   ))}
