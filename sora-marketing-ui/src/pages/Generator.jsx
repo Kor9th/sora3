@@ -34,14 +34,12 @@ export default function Generator({ onLogout, user }) {
     setVideoUrl(null);
   }
 
-  // TEMP: fake generator until backend is stable
+  // TEMP: No placeholder video — just simulates a "run" entry
   function generateFake() {
     setLoading(true);
     setVideoUrl(null);
 
     setTimeout(() => {
-      const url = "https://www.w3schools.com/html/mov_bbb.mp4";
-      setVideoUrl(url);
       setLoading(false);
 
       setHistory((prev) => [
@@ -51,11 +49,11 @@ export default function Generator({ onLogout, user }) {
           prompt: prompt.trim(),
           resolution,
           duration,
-          url,
+          url: null, // <-- no placeholder URL
         },
         ...prev,
       ]);
-    }, 1500);
+    }, 800);
   }
 
   function logout() {
@@ -70,9 +68,7 @@ export default function Generator({ onLogout, user }) {
       <div className="topbar">
         <div>
           <h1>Marketing Video Generator</h1>
-          <p className="muted">
-            Prompt → generate → preview → download
-          </p>
+          <p className="muted">Prompt → generate → preview → download</p>
         </div>
 
         <div className="userBar">
@@ -180,10 +176,7 @@ export default function Generator({ onLogout, user }) {
             </div>
 
             <div className="cardBody">
-              {!videoUrl && !loading && (
-                <p className="muted">No video yet.</p>
-              )}
-
+              {!videoUrl && !loading && <p className="muted">No video yet.</p>}
               {loading && <p className="muted">Working on it…</p>}
 
               {videoUrl && (
@@ -218,9 +211,7 @@ export default function Generator({ onLogout, user }) {
 
             <div className="cardBody">
               {!history.length && (
-                <p className="muted">
-                  Generated videos will appear here.
-                </p>
+                <p className="muted">Generated videos will appear here.</p>
               )}
 
               {!!history.length && (
@@ -229,9 +220,15 @@ export default function Generator({ onLogout, user }) {
                     <div className="item" key={h.id}>
                       <div className="itemTop">
                         <p className="itemTitle">{h.createdAt}</p>
-                        <a className="smallLink" href={h.url} download>
-                          Download
-                        </a>
+
+                        {/* No download link if no URL */}
+                        {h.url ? (
+                          <a className="smallLink" href={h.url} download>
+                            Download
+                          </a>
+                        ) : (
+                          <span className="muted">Pending</span>
+                        )}
                       </div>
 
                       <p className="itemMeta">
