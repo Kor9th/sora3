@@ -2,6 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 import re
+from prompts import Base_prompt
 
 load_dotenv(dotenv_path=r"backend\.env")
 
@@ -39,8 +40,7 @@ def request_video(prompt:str, size_str: str ,sec: str, image: str = None):
         print(f"WARNING: Invalid size_str '{size_str}'. Defaulting to 1024x1024.")
     
 
-   
-
+    final_prompt = f"{Base_prompt}\n\n{prompt}"
     headers ={"api-key":SORA_KEY, "Content-Type":"application/json"}
     payload = {
         "model":'sora',
@@ -52,11 +52,11 @@ def request_video(prompt:str, size_str: str ,sec: str, image: str = None):
     if image:
         payload["input"] =[
             {"type": "input_image", "image": image},
-            {"type": "input_text", "text": prompt}
+            {"type": "input_text", "text": final_prompt}
         ]
    
     else:
-        payload["prompt"] = prompt
+        payload["prompt"] = final_prompt
 
     response = requests.post(SORA_ENDPOINT,headers=headers,json=payload)
 
