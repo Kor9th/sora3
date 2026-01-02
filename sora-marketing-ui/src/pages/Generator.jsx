@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function nowLabel() {
   const d = new Date();
@@ -13,17 +13,17 @@ function nowLabel() {
 export default function Generator({ onLogout, user }) {
   const [prompt, setPrompt] = useState("");
   const [resolution, setResolution] = useState("1920x1080");
-  const [duration, setDuration] = useState(6);
+  const [duration, setDuration] = useState(10);
+
+  const [assets, setAssets] = useState([]);
+  const [assetPreviews, setAssetPreviews] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [history, setHistory] = useState([]);
-
-  // FIX: Added status message to show real-time updates during video generation
-  // This displays current status like "queued", "running", or "processing" to the user
   const [statusMessage, setStatusMessage] = useState("");
 
-
+  const fileInputRef = useRef(null);
   const charLimit = 1000;
 
   const canGenerate = useMemo(
@@ -31,63 +31,85 @@ export default function Generator({ onLogout, user }) {
     [prompt, loading]
   );
 
+  useEffect(() => {
+    const urls = assets.map((f) => URL.createObjectURL(f));
+    setAssetPreviews(urls);
+
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [assets]);
+
   function reset() {
     setPrompt("");
     setResolution("1920x1080");
-    setDuration(6);
+    setDuration(10);
+    setAssets([]);
     setLoading(false);
     setVideoUrl(null);
     setStatusMessage("");
   }
 
+  function logout() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("token_type");
+    if (typeof onLogout === "function") onLogout();
+  }
 
-  // FIX: Added polling function to check video generation status every 2 seconds
-  // Prevents trying to download video before it's ready (which caused 404 errors)
-  // Will keep checking for up to 6 minutes before timing out
+  function onPickAssets() {
+    fileInputRef.current?.click();
+  }
+
+  function onAssetsSelected(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setAssets((prev) => {
+      const next = [...prev];
+      for (const f of files) {
+        const exists = next.some(
+          (x) => x.name === f.name && x.size === f.size && x.lastModified === f.lastModified
+        );
+        if (!exists) next.push(f);
+      }
+      return next;
+    });
+
+    e.target.value = "";
+  }
+
+  function removeAsset(idx) {
+    setAssets((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function clearAssets() {
+    setAssets([]);
+  }
 
   async function pollVideoStatus(videoId, token) {
-    const maxAttempts = 180; // 180 * 2 seconds = 6 minutes max
+    const maxAttempts = 180;
     let attempts = 0;
 
     while (attempts < maxAttempts) {
       try {
         const statusRes = await fetch(`http://127.0.0.1:8000/videos/${videoId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
 
-
-        // FIX: Detect when user's login session has expired (401 error)
-        // Previously this would fail silently, now it tells the user to log in again
-
-        if (statusRes.status === 401) {
-          throw new Error("Unauthorized: Please log in again.");
-        }
-
-        if (!statusRes.ok) {
-          throw new Error(`Status check failed (${statusRes.status})`);
-        }
+        if (statusRes.status === 401) return { success: false, error: "Unauthorized" };
+        if (!statusRes.ok) throw new Error("Status check failed");
 
         const statusData = await statusRes.json();
-        const status = statusData.status?.toLowerCase();
+        const status = (statusData.status || "").toLowerCase();
 
-        if (status === "completed") {
-          return { success: true, data: statusData };
-        } else if (status === "failed") {
-          return { success: false, error: "Video generation failed" };
-        } else {
-          // Still processing - update status message
-          setStatusMessage(`Status: ${status}...`);
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-          attempts++;
-        }
-      } catch (err) {
-        console.error("Error polling status:", err);
-        if (err.message.includes("Unauthorized")) {
-          return { success: false, error: "Unauthorized" };
-        }
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (status === "completed") return { success: true, data: statusData };
+        if (status === "failed") return { success: false, error: "Video generation failed" };
+
+        setStatusMessage(`Status: ${status || "processing"}...`);
+        await new Promise((r) => setTimeout(r, 2000));
+        attempts++;
+      } catch {
+        await new Promise((r) => setTimeout(r, 2000));
         attempts++;
       }
     }
@@ -106,14 +128,17 @@ export default function Generator({ onLogout, user }) {
 
       const formData = new FormData();
       formData.append("prompt", prompt.trim());
-      formData.append("size_str", resolution);      // backend expects size_str
-      formData.append("sec", String(duration));     // backend expects sec
+      formData.append("size_str", resolution);
+      formData.append("sec", String(duration));
+
+      assets.forEach((file) => {
+        formData.append("assets", file);
+      });
 
       const res = await fetch("http://127.0.0.1:8000/generate", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          // IMPORTANT: do not set Content-Type for FormData
         },
         body: formData,
       });
@@ -126,21 +151,11 @@ export default function Generator({ onLogout, user }) {
       const data = await res.json().catch(() => ({}));
       const id = data.id ?? data.video_id ?? data.videoId;
 
-      if (!id) {
-        throw new Error("Generate succeeded but backend did not return a video id.");
-      }
+      if (!id) throw new Error("Generate succeeded but backend did not return a video id.");
 
       setStatusMessage("Video generation started. Waiting for completion...");
 
-      // FIX: Wait for video generation to complete before trying to download
-      // Previously tried to fetch immediately which caused 404 errors
-
       const pollResult = await pollVideoStatus(id, token);
-
-
-      // FIX: Handle authentication errors during polling
-      // If session expired, automatically log out user and show clear error message
-
       if (!pollResult.success) {
         if (pollResult.error === "Unauthorized") {
           logout();
@@ -151,33 +166,17 @@ export default function Generator({ onLogout, user }) {
 
       setStatusMessage("Video ready! Downloading...");
 
-      // FIX: Fetch video using authentication token to access protected endpoint
-      // Without the token, the browser gets 401 Unauthorized error
-
       const streamEndpoint = `http://127.0.0.1:8000/videos/${id}/stream`;
       const videoRes = await fetch(streamEndpoint, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!videoRes.ok) {
-        throw new Error(`Failed to fetch video stream (${videoRes.status})`);
-      }
+      if (!videoRes.ok) throw new Error(`Failed to fetch video stream (${videoRes.status})`);
 
-      console.log('Video response headers:', videoRes.headers.get('content-type'));
       const videoBlob = await videoRes.blob();
-      console.log('Video blob size:', videoBlob.size, 'type:', videoBlob.type);
-      
-      if (videoBlob.size === 0) {
-        throw new Error("Received empty video file");
-      }
-
-      // FIX: Convert downloaded video data into a blob URL that the browser can play
-      // This allows the video to work in the <video> tag without authentication issues
+      if (videoBlob.size === 0) throw new Error("Received empty video file");
 
       const blobUrl = URL.createObjectURL(videoBlob);
-      console.log('Created blob URL:', blobUrl);
       setVideoUrl(blobUrl);
       setStatusMessage("");
 
@@ -189,7 +188,9 @@ export default function Generator({ onLogout, user }) {
           resolution,
           duration,
           url: blobUrl,
-          streamEndpoint, // Keep endpoint for re-fetching if needed
+          streamEndpoint,
+          assetNames: assets.map((a) => a.name),
+          assetCount: assets.length,
         },
         ...prev,
       ]);
@@ -201,19 +202,12 @@ export default function Generator({ onLogout, user }) {
     }
   }
 
-  function logout() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("token_type");
-    onLogout();
-  }
-
   return (
     <div className="container">
-      {/* TOP BAR */}
       <div className="topbar">
         <div>
           <h1>Marketing Video Generator</h1>
-          <p className="muted">Prompt → generate → preview → stream</p>
+          <p className="muted">Prompt → assets → generate → preview</p>
         </div>
 
         <div className="userBar">
@@ -225,14 +219,11 @@ export default function Generator({ onLogout, user }) {
       </div>
 
       <div className="shell">
-        {/* LEFT PANEL */}
         <div className="card">
           <div className="cardHeader">
             <div>
               <h2>Create video</h2>
-              <div className="sub">
-                Describe the marketing video you want to generate.
-              </div>
+              <div className="sub">Add optional images as assets for context.</div>
             </div>
 
             {loading && (
@@ -243,7 +234,6 @@ export default function Generator({ onLogout, user }) {
           </div>
 
           <div className="cardBody">
-            {/* PROMPT */}
             <div style={{ marginBottom: 14 }}>
               <div className="label">Marketing prompt</div>
 
@@ -253,19 +243,17 @@ export default function Generator({ onLogout, user }) {
                 maxLength={charLimit}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Example: A modern skincare ad, clean white background, soft studio lighting, close-up product shots, minimal motion graphics, calm luxury vibe."
+                disabled={loading}
               />
 
               <div className="promptMeta">
-                <span className="fieldHint">
-                  Tips: product, audience, setting, mood, camera style
-                </span>
+                <span className="fieldHint">Tips: product, audience, setting, mood, camera style</span>
                 <span className="charCount">
                   {prompt.length}/{charLimit}
                 </span>
               </div>
             </div>
 
-            {/* OPTIONS */}
             <div className="row">
               <div>
                 <div className="label">Resolution</div>
@@ -293,17 +281,77 @@ export default function Generator({ onLogout, user }) {
                   <option value={5}>5</option>
                   <option value={10}>10</option>
                   <option value={15}>15</option>
+                  <option value={20}>20</option>
                 </select>
               </div>
             </div>
 
-            {/* ACTIONS */}
-            <div className="actions">
-              <button
-                className="btn btnPrimary"
-                disabled={!canGenerate}
-                onClick={generateVideo}
-              >
+            <div style={{ marginTop: 14 }}>
+              <div className="label">Assets (optional)</div>
+
+              <div className="actions" style={{ gap: 10 }}>
+                <button className="btn btnSecondary" onClick={onPickAssets} disabled={loading}>
+                  Add assets
+                </button>
+
+                <button
+                  className="btn btnSecondary"
+                  onClick={clearAssets}
+                  disabled={loading || assets.length === 0}
+                >
+                  Clear
+                </button>
+
+                <span className="muted" style={{ alignSelf: "center" }}>
+                  {assets.length ? `${assets.length} selected` : "None selected"}
+                </span>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={onAssetsSelected}
+              />
+
+              {assets.length > 0 && (
+                <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {assetPreviews.map((src, i) => (
+                      <div
+                        key={src}
+                        style={{
+                          width: 120,
+                          borderRadius: 12,
+                          overflow: "hidden",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <img
+                          src={src}
+                          alt={assets[i]?.name || "asset"}
+                          style={{ width: "100%", height: 90, objectFit: "cover", display: "block" }}
+                        />
+                        <div style={{ padding: 8, display: "grid", gap: 6 }}>
+                          <div className="muted" style={{ fontSize: 12, lineHeight: 1.2 }}>
+                            {(assets[i]?.name || "").slice(0, 22)}
+                            {(assets[i]?.name || "").length > 22 ? "…" : ""}
+                          </div>
+                          <button className="smallLink" onClick={() => removeAsset(i)} disabled={loading}>
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="actions" style={{ marginTop: 16 }}>
+              <button className="btn btnPrimary" disabled={!canGenerate} onClick={generateVideo}>
                 {loading ? "Generating…" : "Generate video"}
               </button>
 
@@ -314,9 +362,7 @@ export default function Generator({ onLogout, user }) {
           </div>
         </div>
 
-        {/* RIGHT PANEL */}
         <div style={{ display: "grid", gap: 16 }}>
-          {/* PREVIEW */}
           <div className="card">
             <div className="cardHeader">
               <h2>Preview</h2>
@@ -324,38 +370,26 @@ export default function Generator({ onLogout, user }) {
 
             <div className="cardBody">
               {!videoUrl && !loading && <p className="muted">No video yet.</p>}
+
               {loading && (
                 <div>
                   <p className="muted">Working on it…</p>
-                  {statusMessage && <p className="muted" style={{ marginTop: 8, fontSize: 14 }}>{statusMessage}</p>}
+                  {statusMessage && (
+                    <p className="muted" style={{ marginTop: 8, fontSize: 14 }}>
+                      {statusMessage}
+                    </p>
+                  )}
                 </div>
               )}
 
               {videoUrl && (
                 <>
-                  <video 
-                    className="video" 
-                    controls 
-                    src={videoUrl}
-                    onError={(e) => {
-                      console.error('Video error:', e);
-                      console.error('Video error code:', e.target.error?.code);
-                      console.error('Video error message:', e.target.error?.message);
-                      alert('Failed to load video. Error code: ' + (e.target.error?.code || 'unknown'));
-                    }}
-                    onLoadedData={() => {
-                      console.log('Video loaded successfully');
-                    }}
-                  />
+                  <video className="video" controls src={videoUrl} />
                   <div className="actions" style={{ marginTop: 12 }}>
                     <button
                       className="btn btnPrimary"
                       onClick={() => {
-
-                        // FIX: Changed from "Open stream" to proper download functionality
-                        // Creates a download link and triggers it to save video to user's computer
-
-                        const a = document.createElement('a');
+                        const a = document.createElement("a");
                         a.href = videoUrl;
                         a.download = `video-${Date.now()}.mp4`;
                         a.click();
@@ -375,19 +409,14 @@ export default function Generator({ onLogout, user }) {
             </div>
           </div>
 
-          {/* HISTORY */}
           <div className="card">
             <div className="cardHeader">
               <h2>History</h2>
-              <div className="sub">
-                {history.length ? "Recent videos" : "No videos yet"}
-              </div>
+              <div className="sub">{history.length ? "Recent videos" : "No videos yet"}</div>
             </div>
 
             <div className="cardBody">
-              {!history.length && (
-                <p className="muted">Generated videos will appear here.</p>
-              )}
+              {!history.length && <p className="muted">Generated videos will appear here.</p>}
 
               {!!history.length && (
                 <div className="list">
@@ -397,9 +426,8 @@ export default function Generator({ onLogout, user }) {
                         <p className="itemTitle">{h.createdAt}</p>
                         <button
                           className="smallLink"
-                          onClick={async () => {
-                            // Download this video
-                            const a = document.createElement('a');
+                          onClick={() => {
+                            const a = document.createElement("a");
                             a.href = h.url;
                             a.download = `video-${h.id}.mp4`;
                             a.click();
@@ -415,6 +443,7 @@ export default function Generator({ onLogout, user }) {
 
                       <div className="itemMeta">
                         {h.resolution} · {h.duration}s
+                        {typeof h.assetCount === "number" ? ` · ${h.assetCount} asset(s)` : ""}
                       </div>
 
                       <a
@@ -425,18 +454,12 @@ export default function Generator({ onLogout, user }) {
                           setPrompt(h.prompt);
                           setResolution(h.resolution);
                           setDuration(h.duration);
-                          
-
-                          // FIX: When previewing old videos, re-fetch them with authentication
-                          // This ensures videos from history can still be played even after browser refresh
 
                           if (h.streamEndpoint) {
                             try {
                               const token = localStorage.getItem("access_token");
                               const videoRes = await fetch(h.streamEndpoint, {
-                                headers: {
-                                  Authorization: `Bearer ${token}`,
-                                },
+                                headers: { Authorization: `Bearer ${token}` },
                               });
                               if (videoRes.ok) {
                                 const videoBlob = await videoRes.blob();
@@ -444,12 +467,9 @@ export default function Generator({ onLogout, user }) {
                                 setVideoUrl(blobUrl);
                                 return;
                               }
-                            } catch (err) {
-                              console.error("Failed to re-fetch video:", err);
-                            }
+                            } catch {}
                           }
-                          
-                          // Fallback to existing URL
+
                           setVideoUrl(h.url);
                         }}
                       >
