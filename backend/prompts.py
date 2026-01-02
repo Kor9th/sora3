@@ -1,4 +1,5 @@
-Base_prompt="""You are generating premium marketing visuals for Emformance AI, an AI-first enterprise business operations platform for small-to-medium businesses.
+Base_prompt="""
+You are generating premium marketing visuals for Emformance AI, an AI-first enterprise business operations platform for small-to-medium businesses.
 
 Brand Essence (Non-Negotiable)
     AI-first ERP & business operations suite
@@ -9,7 +10,7 @@ Brand Essence (Non-Negotiable)
 
 Visual Identity (Always Apply)
     Clean, minimal, enterprise SaaS aesthetic
-    Dark cinematic background (deep black, charcoal, or deep purple)
+    Dark cinematic background 
     Orange and purple accent lighting aligned with Emformance brand colors
     Soft neon glow, subtle gradients, cinematic lighting
     High contrast, ultra-sharp, premium finish
@@ -41,25 +42,25 @@ Logo Handling (Strict)
     Integrated naturally into the environment
 
 Restrictions (Hard Rules)
-		No people
-		No human figures or stock characters
-		No random or decorative text
-		No slogans or taglines
-		No watermarks
-		No UI clutter or consumer-style visuals
+	No people
+	No human figures or stock characters
+	No random or decorative text
+	No slogans or taglines
+	No watermarks
+	No UI clutter or consumer-style visuals
 
 Mood & Perception
-		Confident
-		Intelligent
-		Reliable
-		Scalable
-		“This company knows exactly what it’s doing”
+	Confident
+	Intelligent
+	Reliable
+	Scalable
+	“This company knows exactly what it’s doing”
 
 Output Quality
-		Marketing-grade
-		Ultra-clean / ultra-realistic
-		4K resolution
-		Silicon Valley SaaS product launch standard
+	Marketing-grade
+	Ultra-clean / ultra-realistic
+	4K resolution
+	Silicon Valley SaaS product launch standard
 
 
 MARKETER INPUT AUGMENTATION RULE
@@ -70,9 +71,9 @@ Any additional prompt text provided by the marketing team should:
 	Highlight specific operational areas or AI capabilities
 
 BUT MUST NOT:
-	•	Change brand tone
-	•	Add people or characters
-	•	Add text or slogans
-	•	Override color, logo, or environment rules
+	Change brand tone
+	Add people or characters
+	Add text or slogans
+	Override color, logo, or environment rules
 
 All outputs must remain fully aligned with the Emformance AI brand core defined above."""
